@@ -1,4 +1,4 @@
-"""Pytest tests for game.py — full refactored game with play-again."""
+"""Pytest tests for game.py — themed game with play-again."""
 
 import io
 import sys
@@ -14,8 +14,16 @@ from game import (
     new_game,
     play_game,
     _random_free_cell,
+    _cell_content,
     GRID_SIZE,
     WIN_SCORE,
+    PLAYER,
+    COLLECTIBLE,
+    HAZARD,
+    GAME_NAME,
+    STORY_INTRO,
+    WIN_MSG,
+    LOSE_MSG,
 )
 
 
@@ -31,6 +39,50 @@ def capture_grid(
     draw_grid(pr, pc, cr, cc, hr, hc)
     sys.stdout = old_stdout
     return buf.getvalue()
+
+
+# ============================== THEME CONSTANTS ==============================
+
+class TestTheme:
+    """Tests for the custom theme assets."""
+
+    def test_game_name(self) -> None:
+        assert GAME_NAME == "[Lia Danger dragon]"
+
+    def test_story_intro(self) -> None:
+        assert "dragon Rider" in STORY_INTRO
+        assert "fire" in STORY_INTRO
+
+    def test_player_emoji(self) -> None:
+        assert PLAYER == "🐉"
+
+    def test_collectible_emoji(self) -> None:
+        assert COLLECTIBLE == "📦"
+
+    def test_hazard_emoji(self) -> None:
+        assert HAZARD == "🌋"
+
+    def test_win_message(self) -> None:
+        assert WIN_MSG == "[Victooooory!!!]"
+
+    def test_lose_message(self) -> None:
+        assert LOSE_MSG == "[ You lose!!! ]"
+
+
+# ============================== CELL CONTENT =================================
+
+class TestCellContent:
+    """Tests for the _cell_content() helper."""
+
+    def test_empty_cell(self) -> None:
+        result = _cell_content(" ")
+        assert result.center(4) == result  # should be centred in 4 cols
+
+    def test_emoji_cell(self) -> None:
+        result = _cell_content(PLAYER)
+        assert PLAYER in result
+        assert result.startswith(" ")
+        assert result.endswith(" ")
 
 
 # ============================== RANDOM FREE CELL ============================
@@ -56,7 +108,6 @@ class TestRandomFreeCell:
             assert (r, c) != (4, 4)
 
     def test_ignores_negative_sentinel(self) -> None:
-        """Passing -1 as r2/c2 should only block r1/c1."""
         results = set()
         for _ in range(200):
             r, c = _random_free_cell(2, 2, -1, -1)
@@ -108,15 +159,15 @@ class TestDrawGrid:
 
     def test_player_shown_at_origin(self) -> None:
         grid = capture_grid(0, 0, 3, 3, 4, 4)
-        assert "P" in grid.splitlines()[0]
+        assert PLAYER in grid.splitlines()[0]
 
     def test_player_shown_at_center(self) -> None:
         grid = capture_grid(2, 2, 0, 0, 4, 4)
-        assert "P" in grid.splitlines()[4]
+        assert PLAYER in grid.splitlines()[4]
 
     def test_player_shown_at_bottom_right(self) -> None:
         grid = capture_grid(4, 4, 0, 0, 2, 2)
-        assert "P" in grid.splitlines()[-1]
+        assert PLAYER in grid.splitlines()[-1]
 
     def test_grid_has_correct_number_of_rows(self) -> None:
         grid = capture_grid(0, 0, 3, 3, 4, 4)
@@ -127,39 +178,38 @@ class TestDrawGrid:
         for i in range(1, len(lines), 2):
             assert all(ch == "-" for ch in lines[i])
 
-    def test_empty_cells_show_dot(self) -> None:
+    def test_empty_cells_are_blank(self) -> None:
         grid = capture_grid(0, 0, 4, 4, 4, 0)
         line = grid.splitlines()[2]  # row 1 — empty
-        assert "P" not in line
-        assert "C" not in line
-        assert "X" not in line
-        assert "." in line
+        assert PLAYER not in line
+        assert COLLECTIBLE not in line
+        assert HAZARD not in line
 
     def test_collectible_shown(self) -> None:
         grid = capture_grid(0, 0, 2, 2, 4, 4)
-        assert "C" in grid.splitlines()[4]
+        assert COLLECTIBLE in grid.splitlines()[4]
 
     def test_hazard_shown(self) -> None:
         grid = capture_grid(0, 0, 4, 4, 1, 1)
-        assert "X" in grid.splitlines()[2]
+        assert HAZARD in grid.splitlines()[2]
 
     def test_player_priority_over_collectible(self) -> None:
         grid = capture_grid(1, 1, 1, 1, 4, 4)
         line = grid.splitlines()[2]
-        assert "P" in line
-        assert "C" not in line
+        assert PLAYER in line
+        assert COLLECTIBLE not in line
 
     def test_player_priority_over_hazard(self) -> None:
         grid = capture_grid(1, 1, 4, 4, 1, 1)
         line = grid.splitlines()[2]
-        assert "P" in line
-        assert "X" not in line
+        assert PLAYER in line
+        assert HAZARD not in line
 
     def test_hazard_priority_over_collectible(self) -> None:
         grid = capture_grid(0, 0, 2, 2, 2, 2)
         line = grid.splitlines()[4]
-        assert "X" in line
-        assert "C" not in line
+        assert HAZARD in line
+        assert COLLECTIBLE not in line
 
 
 # ============================== MOVEMENT ====================================
@@ -239,8 +289,7 @@ class TestPlayGame:
         """Move right twice: (0,0) -> (0,1) -> (0,2). Place hazard at (0,2)."""
         inputs = iter(["d", "d"])
         monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-        # Force positions so hazard is at (0, 2)
-        orig_new_game = game.new_game
+
         def fake_new_game() -> tuple[int, int, int, int, int, int]:
             return 0, 0, 4, 4, 0, 2  # hazard at (0,2)
         monkeypatch.setattr(game, "new_game", fake_new_game)
@@ -259,7 +308,6 @@ class TestPlayGame:
         monkeypatch.setattr(game, "new_game", fake_new_game)
         monkeypatch.setattr(game, "_random_free_cell", fake_random_free_cell)
 
-        # d collects, a moves back, d collects again... 10 collects = 19 moves
         moves: list[str] = []
         for i in range(10):
             moves.append("d")  # collect
@@ -283,7 +331,7 @@ class TestClearScreen:
         assert "\033c" in captured.out
 
 
-# ============================== WIN / LOSS CONSTANTS ========================
+# ============================== GAME CONSTANTS ==============================
 
 class TestConstants:
     """Tests for game constants."""

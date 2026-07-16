@@ -1,10 +1,20 @@
-# Our terminal game! A 5x5 grid with WASD movement, collectibles, and hazards.
+# Lia Danger Dragon — A terminal grid game.
 
 import random
+
+# --- Theme ---
+GAME_NAME: str = "[Lia Danger dragon]"
+STORY_INTRO: str = "[Navigate the dragon Rider to collect boxes.Be careful of fire]"
+PLAYER: str = "🐉"
+COLLECTIBLE: str = "📦"
+HAZARD: str = "🌋"
+WIN_MSG: str = "[Victooooory!!!]"
+LOSE_MSG: str = "[ You lose!!! ]"
 
 # --- Grid Settings ---
 GRID_SIZE: int = 5
 WIN_SCORE: int = 10
+CELL_WIDTH: int = 4  # visual width of each cell in terminal columns
 
 
 def new_game() -> tuple[int, int, int, int, int, int]:
@@ -26,26 +36,39 @@ def _random_free_cell(r1: int, c1: int, r2: int, c2: int) -> tuple[int, int]:
             return r, c
 
 
+def _cell_content(symbol: str) -> str:
+    """Format a cell with consistent width. Emojis are 2 terminal columns
+    wide, so emoji cells get one space on each side. Empty cells get
+    proportional padding to stay aligned."""
+    if symbol == " ":
+        return symbol.center(CELL_WIDTH)
+    return f" {symbol} "
+
+
 def draw_grid(
     pr: int, pc: int, cr: int, cc: int, hr: int, hc: int
 ) -> None:
     """Draw the grid showing the player, collectible, and hazard."""
+    empty: str = " "
+    sep_width: int = GRID_SIZE * CELL_WIDTH + (GRID_SIZE - 1)
+
     for row in range(GRID_SIZE):
         row_string: str = ""
         for col in range(GRID_SIZE):
             if row == pr and col == pc:
-                row_string += " P "
+                cell = _cell_content(PLAYER)
             elif row == hr and col == hc:
-                row_string += " X "
+                cell = _cell_content(HAZARD)
             elif row == cr and col == cc:
-                row_string += " C "
+                cell = _cell_content(COLLECTIBLE)
             else:
-                row_string += " . "
+                cell = _cell_content(empty)
+            row_string += cell
             if col < GRID_SIZE - 1:
                 row_string += "|"
         print(row_string)
         if row < GRID_SIZE - 1:
-            print("-" * (GRID_SIZE * 4 - 1))
+            print("-" * sep_width)
 
 
 def move_player(direction: str, pr: int, pc: int) -> tuple[int, int]:
@@ -92,7 +115,7 @@ def play_game() -> str:
             clear_screen()
             print(f"Score: {score} / {WIN_SCORE}")
             draw_grid(pr, pc, cr, cc, hr, hc)
-            print("\nGame Over!")
+            print(f"\n{LOSE_MSG}")
             return "lose"
 
         # --- Check collectible (score up + respawn) ---
@@ -104,16 +127,19 @@ def play_game() -> str:
                 clear_screen()
                 print(f"Score: {score} / {WIN_SCORE}")
                 draw_grid(pr, pc, cr, cc, hr, hc)
-                print(f"\nYou win! Final score: {score}")
+                print(f"\n{WIN_MSG} Final score: {score}")
                 return "win"
 
 
 def main() -> None:
     """Outer game loop with play-again support."""
-    print("Welcome to the Grid Game!")
-    print("You are 'P'. Collect the 'C' items!")
-    print("Avoid the 'X' hazard!")
-    print(f"Collect {WIN_SCORE} items to win. WASD to move.")
+    print(f"{'=' * 40}")
+    print(f"        {GAME_NAME}")
+    print(f"{'=' * 40}")
+    print(f"\n{STORY_INTRO}\n")
+    print(f"  You are {PLAYER}. Collect {COLLECTIBLE} items!")
+    print(f"  Avoid the {HAZARD} hazard!")
+    print(f"  Collect {WIN_SCORE} items to win. WASD to move.")
     input("\nPress Enter to start...")
 
     while True:
