@@ -1,4 +1,4 @@
-"""Pytest tests for game.py — grid drawing, movement, boundaries, collectibles."""
+"""Pytest tests for game.py — grid, movement, boundaries, collectibles, hazards."""
 
 import io
 import sys
@@ -12,7 +12,9 @@ from game import (
     move_player,
     clear_screen,
     spawn_collectible,
+    spawn_hazard,
     check_collect,
+    check_hazard,
     GRID_SIZE,
     WIN_SCORE,
 )
@@ -23,11 +25,13 @@ from game import (
 # ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def reset_game() -> Generator[None, None, None]:
-    """Reset player, collectible, and score before each test."""
+    """Reset player, collectible, hazard, and score before each test."""
     game.player_row = 0
     game.player_col = 0
     game.collectible_row = 3
     game.collectible_col = 3
+    game.hazard_row = 4
+    game.hazard_col = 4
     game.score = 0
     yield
     game.player_row = 0
@@ -62,8 +66,6 @@ class TestDrawGrid:
         game.player_row = 2
         game.player_col = 2
         lines = capture_grid().splitlines()
-        # Row 0 = line 0, separator = line 1, Row 1 = line 2, separator = line 3,
-        # Row 2 = line 4
         assert "P" in lines[4]
 
     def test_player_shown_at_bottom_right(self) -> None:
@@ -85,15 +87,18 @@ class TestDrawGrid:
             assert all(ch == "-" for ch in lines[i])
 
     def test_empty_cells_show_dot(self) -> None:
-        """Cells without the player or collectible should display '.'."""
+        """Cells without player, collectible, or hazard should display '.'."""
         game.player_row = 0
         game.player_col = 0
         game.collectible_row = 4
         game.collectible_col = 4
+        game.hazard_row = 4
+        game.hazard_col = 0
         lines = capture_grid().splitlines()
-        # Line 2 is row 1 — player and collectible are NOT on row 1
+        # Line 2 is row 1 — nothing is on row 1
         assert "P" not in lines[2]
         assert "C" not in lines[2]
+        assert "X" not in lines[2]
         assert "." in lines[2]
 
     def test_collectible_shown_on_grid(self) -> None:
@@ -101,7 +106,14 @@ class TestDrawGrid:
         game.collectible_row = 2
         game.collectible_col = 2
         lines = capture_grid().splitlines()
-        assert "C" in lines[4]  # Row 2 = line 4
+        assert "C" in lines[4]
+
+    def test_hazard_shown_on_grid(self) -> None:
+        """Grid should show X where the hazard is placed."""
+        game.hazard_row = 1
+        game.hazard_col = 1
+        lines = capture_grid().splitlines()
+        assert "X" in lines[2]  # Row 1 = line 2
 
     def test_player_takes_priority_over_collectible(self) -> None:
         """If player and collectible are on the same cell, show P not C."""
@@ -112,6 +124,26 @@ class TestDrawGrid:
         lines = capture_grid().splitlines()
         assert "P" in lines[2]
         assert "C" not in lines[2]
+
+    def test_player_takes_priority_over_hazard(self) -> None:
+        """If player and hazard are on the same cell, show P not X."""
+        game.player_row = 1
+        game.player_col = 1
+        game.hazard_row = 1
+        game.hazard_col = 1
+        lines = capture_grid().splitlines()
+        assert "P" in lines[2]
+        assert "X" not in lines[2]
+
+    def test_hazard_takes_priority_over_collectible(self) -> None:
+        """If hazard and collectible share a cell, show X not C."""
+        game.hazard_row = 2
+        game.hazard_col = 2
+        game.collectible_row = 2
+        game.collectible_col = 2
+        lines = capture_grid().splitlines()
+        assert "X" in lines[4]
+        assert "C" not in lines[4]
 
 
 # ============================== MOVEMENT ====================================
@@ -190,10 +222,10 @@ class TestBoundaries:
         assert game.player_col == GRID_SIZE - 1
 
     @pytest.mark.parametrize("direction, start_row, start_col", [
-        ("w", 0, 2),  # top edge
-        ("s", GRID_SIZE - 1, 2),  # bottom edge
-        ("a", 2, 0),  # left edge
-        ("d", 2, GRID_SIZE - 1),  # right edge
+        ("w", 0, 2),
+        ("s", GRID_SIZE - 1, 2),
+        ("a", 2, 0),
+        ("d", 2, GRID_SIZE - 1),
     ])
     def test_boundary_parametrized(
         self, direction: str, start_row: int, start_col: int
@@ -234,7 +266,6 @@ class TestSpawnCollectible:
         for _ in range(200):
             spawn_collectible()
             positions.add((game.collectible_row, game.collectible_col))
-        # With 24 possible positions, we should hit more than 1
         assert len(positions) > 1
 
 
@@ -258,9 +289,6 @@ class TestCheckCollect:
         game.player_col = old_pos[1]
         check_collect()
         new_pos = (game.collectible_row, game.collectible_col)
-        # The collectible should have moved (may occasionally be same, but
-        # extremely unlikely on a 5x5 grid with 24 free spots)
-        # We just check it's still within bounds
         assert 0 <= new_pos[0] < GRID_SIZE
         assert 0 <= new_pos[1] < GRID_SIZE
 
@@ -297,6 +325,77 @@ class TestWinCondition:
             game.player_col = game.collectible_col
             check_collect()
         assert game.score == WIN_SCORE
+
+
+# ============================== HAZARD SPAWNING ==============================
+
+class TestSpawnHazard:
+    """Tests for the spawn_hazard() function."""
+
+    def test_hazard_within_grid(self) -> None:
+        """Hazard should always be inside the grid boundaries."""
+        for _ in range(100):
+            spawn_hazard()
+            assert 0 <= game.hazard_row < GRID_SIZE
+            assert 0 <= game.hazard_col < GRID_SIZE
+
+    def test_hazard_not_on_player(self) -> None:
+        """Hazard should never spawn on top of the player."""
+        game.player_row = 2
+        game.player_col = 2
+        for _ in range(100):
+            spawn_hazard()
+            assert (game.hazard_row, game.hazard_col) != (2, 2)
+
+    def test_hazard_not_on_collectible(self) -> None:
+        """Hazard should never spawn on top of the collectible."""
+        game.collectible_row = 1
+        game.collectible_col = 1
+        for _ in range(100):
+            spawn_hazard()
+            assert (game.hazard_row, game.hazard_col) != (1, 1)
+
+    def test_hazard_varies_position(self) -> None:
+        """Over many spawns, hazard should land on different spots."""
+        game.player_row = 0
+        game.player_col = 0
+        game.collectible_row = 4
+        game.collectible_col = 4
+        positions = set()
+        for _ in range(200):
+            spawn_hazard()
+            positions.add((game.hazard_row, game.hazard_col))
+        assert len(positions) > 1
+
+
+# ============================== HAZARD CHECK =================================
+
+class TestCheckHazard:
+    """Tests for the check_hazard() function."""
+
+    def test_hazard_returns_true_when_on_hazard(self) -> None:
+        """Should return True when player is on the hazard."""
+        game.player_row = game.hazard_row
+        game.player_col = game.hazard_col
+        assert check_hazard() is True
+
+    def test_hazard_returns_false_when_safe(self) -> None:
+        """Should return False when player is not on the hazard."""
+        game.player_row = 0
+        game.player_col = 0
+        game.hazard_row = 4
+        game.hazard_col = 4
+        assert check_hazard() is False
+
+    def test_hazard_at_each_corner(self) -> None:
+        """Player stepping on hazard at any corner should return True."""
+        corners = [(0, 0), (0, 4), (4, 0), (4, 4)]
+        for hr, hc in corners:
+            game.hazard_row = hr
+            game.hazard_col = hc
+            game.player_row = hr
+            game.player_col = hc
+            assert check_hazard() is True
 
 
 # ============================== CLEAR SCREEN ================================

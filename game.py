@@ -1,4 +1,4 @@
-# Our terminal game! A 5x5 grid with WASD movement and collectibles.
+# Our terminal game! A 5x5 grid with WASD movement, collectibles, and hazards.
 
 import random
 
@@ -11,6 +11,10 @@ player_col: int = 0
 # --- Collectible Position ---
 collectible_row: int = 0
 collectible_col: int = 0
+
+# --- Hazard Position ---
+hazard_row: int = 0
+hazard_col: int = 0
 
 # --- Score ---
 score: int = 0
@@ -30,13 +34,26 @@ def spawn_collectible() -> None:
             break  # Found a spot that isn't the player
 
 
+def spawn_hazard() -> None:
+    """Place the hazard at a random position that isn't the player or collectible."""
+    global hazard_row, hazard_col
+    while True:
+        hazard_row = random.randint(0, GRID_SIZE - 1)
+        hazard_col = random.randint(0, GRID_SIZE - 1)
+        if (hazard_row, hazard_col) != (player_row, player_col):
+            if (hazard_row, hazard_col) != (collectible_row, collectible_col):
+                break
+
+
 def draw_grid() -> None:
-    """Draws the grid to the terminal, showing the player and collectible."""
+    """Draws the grid to the terminal, showing the player, collectible, and hazard."""
     for row in range(GRID_SIZE):
         row_string: str = ""
         for col in range(GRID_SIZE):
             if row == player_row and col == player_col:
                 row_string += " P "  # Player is here!
+            elif row == hazard_row and col == hazard_col:
+                row_string += " X "  # Hazard is here!
             elif row == collectible_row and col == collectible_col:
                 row_string += " C "  # Collectible is here!
             else:
@@ -72,6 +89,11 @@ def check_collect() -> bool:
     return False
 
 
+def check_hazard() -> bool:
+    """Check if the player has stepped on the hazard."""
+    return player_row == hazard_row and player_col == hazard_col
+
+
 def clear_screen() -> None:
     """Clears the terminal screen."""
     print("\033c", end="")
@@ -80,9 +102,11 @@ def clear_screen() -> None:
 def main() -> None:
     """Main game loop."""
     spawn_collectible()
+    spawn_hazard()
 
     print("Welcome to the Grid Game!")
     print("You are 'P'. Collect the 'C' items!")
+    print("Avoid the 'X' hazard!")
     print(f"Collect {WIN_SCORE} items to win. WASD to move.")
     input("\nPress Enter to start...")
 
@@ -99,6 +123,14 @@ def main() -> None:
 
         if user_input in ("w", "a", "s", "d"):
             move_player(user_input)
+
+            if check_hazard():
+                clear_screen()
+                print(f"Score: {score} / {WIN_SCORE}")
+                draw_grid()
+                print("\nGame Over!")
+                break
+
             check_collect()
 
             if score >= WIN_SCORE:
